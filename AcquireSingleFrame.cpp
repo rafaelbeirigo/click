@@ -27,11 +27,105 @@ using namespace Basler_GigEStreamParams;
 #error Camera type is not specified. For example, define USE_GIGE for using GigE cameras
 #endif
 
-// Adicionado.
+// Salvar a figura
 #include <fstream>
+
+// Signal Handling
+#include <stdio.h>     /* standard I/O functions                         */
+#include <unistd.h>    /* standard unix functions, like getpid()         */
+#include <signal.h>    /* signal name macros, and the signal() prototype */
+
+
+Camera_t * pCamera;
+Camera_t::StreamGrabber_t * pStreamGrabber;
 
 // Namespace for using cout
 using namespace std;
+
+void click(int sig_num) {
+  // Grab 10 times
+  const uint32_t numGrabs = 1;
+
+  cout << "teste";
+  fflush(stdout);
+
+  /* re-set the signal handler again to catch_int, for next time */
+  signal(SIGINT, click);
+
+  for (int n = 0; n < numGrabs; n++)
+    {
+      // Let the camera acquire one single image ( Acquisiton mode equals
+      // SingleFrame! )
+      pCamera->AcquisitionStart.Execute();
+      return;
+
+      // Wait for the grabbed image with a timeout of 3 seconds
+      if (pStreamGrabber->GetWaitObject().Wait(3000))
+	{
+	  // Get the grab result from the grabber's result queue
+	  GrabResult Result;
+	  pStreamGrabber->RetrieveResult(Result);
+
+	  if (Result.Succeeded())
+	    {
+	      // Grabbing was successful, process image
+	      cout << "Image #" << n << " acquired!" << endl;
+	      cout << "Size: " << Result.GetSizeX() << " x "
+		   << Result.GetSizeY() << endl;
+
+	      // Get the pointer to the image buffer
+	      const uint8_t *pImageBuffer = (uint8_t *) Result.Buffer();
+                    
+	      // cout << "Gray value of first pixel: " << (uint32_t) pImageBuffer[0]
+	      // << endl << endl;
+                    
+	      // Save to disk
+	      ofstream outpgm("saida.pgm");
+	      outpgm << "P2" << std::endl
+		     << Result.GetSizeX() << " " << Result.GetSizeY() << std::endl
+		     << "255" << std::endl;
+	      for (int oa = 0; oa < Result.GetSizeY(); oa++) {
+		for (int oo = 0; oo < Result.GetSizeX(); oo++) {
+		  outpgm << (int)pImageBuffer[oo + Result.GetSizeX()*oa] << " ";
+		}
+		outpgm << std::endl;
+	      }
+	      outpgm.close();
+
+	      // Reuse the buffer for grabbing the next image
+	      if (n < numGrabs - 1)
+		pStreamGrabber->QueueBuffer(Result.Handle(), NULL);
+	    }
+	  else
+	    {
+	      // Error handling
+	      cerr << "No image acquired!" << endl;
+	      cerr << "Error code : 0x" << hex
+		   << Result.GetErrorCode() << endl;
+	      cerr << "Error description : "
+		   << Result.GetErrorDescription() << endl;
+
+	      // Cancel loop
+	      break;
+	    }
+	}
+      else
+	{
+	  // Timeout
+	  cerr << "Timeout occurred!" << endl;
+
+	  // Get the pending buffer back (You are not allowed to deregister
+	  // buffers when they are still queued)
+	  pStreamGrabber->CancelGrab();
+
+	  // Get all buffers back
+	  for (GrabResult r; pStreamGrabber->RetrieveResult(r););
+
+	  // Cancel loop
+	  break;
+	}
+    }
+}
 
 // This function can be used to wait for user input at the end of the sample program.
 void pressEnterToExit()
@@ -43,6 +137,13 @@ void pressEnterToExit()
 
 int main(int argc, char* argv[])
 {
+    /* set the INT (Ctrl-C) signal handler to 'click' */
+    signal(SIGINT, click);
+
+    // now, lets get into an infinite loop of doing nothing.
+    // for ( ;; )
+    //     pause();
+
     // Automagically call PylonInitialize and PylonTerminate to ensure that the pylon runtime
     // system is initialized during the lifetime of this object
     Pylon::PylonAutoInitTerm autoInitTerm;
@@ -76,13 +177,20 @@ int main(int argc, char* argv[])
         // Create the camera object of the first available camera.
         // The camera object is used to set and get all available
         // camera features.
-        Camera_t Camera(pTl->CreateDevice(devices[0]));
+        pCamera = new Camera_t(pTl->CreateDevice(devices[0]));
+
+	// cout << "vai";
+	// fflush(stdout);
+	// pCamera->AcquisitionStart.Execute();
+	// cout << "foi";
+	// fflush(stdout);
 
         // Open the camera
         Camera.Open();
 
         // Get the first stream grabber object of the selected camera
         Camera_t::StreamGrabber_t StreamGrabber(Camera.GetStreamGrabber(0));
+	pStreamGrabber = &StreamGrabber;
 
         // Open the stream grabber
         StreamGrabber.Open();
@@ -148,79 +256,10 @@ int main(int argc, char* argv[])
         // Put the buffer into the grab queue for grabbing
         StreamGrabber.QueueBuffer(hBuffer, NULL);
 
-        // Grab 10 times
-        const uint32_t numGrabs = 1;
-        for (int n = 0; n < numGrabs; n++)
-        {
-            // Let the camera acquire one single image ( Acquisiton mode equals
-            // SingleFrame! )
-            Camera.AcquisitionStart.Execute();
-
-            // Wait for the grabbed image with a timeout of 3 seconds
-            if (StreamGrabber.GetWaitObject().Wait(3000))
-            {
-                // Get the grab result from the grabber's result queue
-                GrabResult Result;
-                StreamGrabber.RetrieveResult(Result);
-
-                if (Result.Succeeded())
-                {
-                    // Grabbing was successful, process image
-                    cout << "Image #" << n << " acquired!" << endl;
-                    cout << "Size: " << Result.GetSizeX() << " x "
-                    << Result.GetSizeY() << endl;
-
-                    // Get the pointer to the image buffer
-                    const uint8_t *pImageBuffer = (uint8_t *) Result.Buffer();
-                    cout << "Gray value of first pixel: " << (uint32_t) pImageBuffer[0]
-                    << endl << endl;
-                    
-		    // Save to disk
-		    ofstream outppm("saida.ppm");
-		    outppm << "P2" << std::endl
-			   << Result.GetSizeX() << " " << Result.GetSizeY() << std::endl
-			   << "255" << std::endl;
-		    for (int oa = 0; oa < Result.GetSizeY(); oa++) {
-		      for (int oo = 0; oo < Result.GetSizeX(); oo++) {
-			outppm << (int)pImageBuffer[oo + Result.GetSizeX()*oa] << " ";
-		      }
-		      outppm << std::endl;
-		    }
-		    outppm.close();
-
-                    // Reuse the buffer for grabbing the next image
-                    if (n < numGrabs - 1)
-                        StreamGrabber.QueueBuffer(Result.Handle(), NULL);
-                }
-                else
-                {
-                    // Error handling
-                    cerr << "No image acquired!" << endl;
-                    cerr << "Error code : 0x" << hex
-                    << Result.GetErrorCode() << endl;
-                    cerr << "Error description : "
-                    << Result.GetErrorDescription() << endl;
-
-                    // Cancel loop
-                    break;
-                }
-            }
-            else
-            {
-                // Timeout
-                cerr << "Timeout occurred!" << endl;
-
-                // Get the pending buffer back (You are not allowed to deregister
-                // buffers when they are still queued)
-                StreamGrabber.CancelGrab();
-
-                // Get all buffers back
-                for (GrabResult r; StreamGrabber.RetrieveResult(r););
-
-                // Cancel loop
-                break;
-            }
-        }
+	// Wait for signal to take a picture
+	/* now, lets get into an infinite loop of doing nothing. */
+	for ( ;; )
+	  pause();
 
         // Clean up
 
