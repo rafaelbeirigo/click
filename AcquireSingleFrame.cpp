@@ -27,7 +27,6 @@ using namespace Basler_GigEStreamParams;
 #error Camera type is not specified. For example, define USE_GIGE for using GigE cameras
 #endif
 
-// Salvar a figura
 #include <fstream>
 
 // Signal Handling
@@ -35,7 +34,7 @@ using namespace Basler_GigEStreamParams;
 #include <unistd.h>    /* standard unix functions, like getpid()         */
 #include <signal.h>    /* signal name macros, and the signal() prototype */
 
-
+// Global because must be acessed by click (signal)
 Camera_t * pCamera;
 Camera_t::StreamGrabber_t * pStreamGrabber;
 
@@ -43,14 +42,14 @@ Camera_t::StreamGrabber_t * pStreamGrabber;
 using namespace std;
 
 void click(int sig_num) {
+  /* re-set the signal handler again to catch_int, for next time */
+  signal(SIGINT, click);
+
   // Grab 10 times
   const uint32_t numGrabs = 1;
 
   cout << "teste";
   fflush(stdout);
-
-  /* re-set the signal handler again to catch_int, for next time */
-  signal(SIGINT, click);
 
   for (int n = 0; n < numGrabs; n++)
     {
@@ -186,75 +185,75 @@ int main(int argc, char* argv[])
 	// fflush(stdout);
 
         // Open the camera
-        Camera.Open();
+        pCamera->Open();
 
         // Get the first stream grabber object of the selected camera
-        Camera_t::StreamGrabber_t StreamGrabber(Camera.GetStreamGrabber(0));
-	pStreamGrabber = &StreamGrabber;
+        // Camera_t::StreamGrabber_t StreamGrabber(pCamera->GetStreamGrabber(0));
+	pStreamGrabber = new Camera_t::StreamGrabber_t(pCamera->GetStreamGrabber(0));
 
         // Open the stream grabber
-        StreamGrabber.Open();
+        pStreamGrabber->Open();
 
         // Set the image format and AOI
         //Camera.PixelFormat.SetValue(PixelFormat_Mono8);
 	//Camera.PixelFormat.SetValue(PixelFormat_YUV422Packed);
-	Camera.PixelFormat.SetValue(PixelFormat_BayerBG8);
-        Camera.OffsetX.SetValue(0);
-        Camera.OffsetY.SetValue(0);
-        Camera.Width.SetValue(Camera.Width.GetMax());
-        Camera.Height.SetValue(Camera.Height.GetMax());
+	pCamera->PixelFormat.SetValue(PixelFormat_BayerBG8);
+        pCamera->OffsetX.SetValue(0);
+        pCamera->OffsetY.SetValue(0);
+        pCamera->Width.SetValue(pCamera->Width.GetMax());
+        pCamera->Height.SetValue(pCamera->Height.GetMax());
 
         //Disable acquisition start trigger if available
         {
-            GenApi::IEnumEntry* acquisitionStart = Camera.TriggerSelector.GetEntry( TriggerSelector_AcquisitionStart);
+            GenApi::IEnumEntry* acquisitionStart = pCamera->TriggerSelector.GetEntry( TriggerSelector_AcquisitionStart);
             if ( acquisitionStart && GenApi::IsAvailable( acquisitionStart))
             {
-                Camera.TriggerSelector.SetValue( TriggerSelector_AcquisitionStart);
-                Camera.TriggerMode.SetValue( TriggerMode_Off);
+                pCamera->TriggerSelector.SetValue( TriggerSelector_AcquisitionStart);
+                pCamera->TriggerMode.SetValue( TriggerMode_Off);
             }
         }
 
         //Disable frame start trigger if available
         {
-            GenApi::IEnumEntry* frameStart = Camera.TriggerSelector.GetEntry( TriggerSelector_FrameStart);
+            GenApi::IEnumEntry* frameStart = pCamera->TriggerSelector.GetEntry( TriggerSelector_FrameStart);
             if ( frameStart && GenApi::IsAvailable( frameStart))
             {
-                Camera.TriggerSelector.SetValue( TriggerSelector_FrameStart);
-                Camera.TriggerMode.SetValue( TriggerMode_Off);
+                pCamera->TriggerSelector.SetValue( TriggerSelector_FrameStart);
+                pCamera->TriggerMode.SetValue( TriggerMode_Off);
             }
         }
 
         //Set acquisition mode
-        Camera.AcquisitionMode.SetValue(AcquisitionMode_SingleFrame);
+        pCamera->AcquisitionMode.SetValue(AcquisitionMode_SingleFrame);
 
         //Set exposure settings
-        Camera.ExposureMode.SetValue(ExposureMode_Timed);
-        Camera.ExposureTimeRaw.SetValue(30000);
+        pCamera->ExposureMode.SetValue(ExposureMode_Timed);
+        pCamera->ExposureTimeRaw.SetValue(30000);
 
         // Create an image buffer
-        const size_t ImageSize = (size_t)(Camera.PayloadSize.GetValue());
+        const size_t ImageSize = (size_t)(pCamera->PayloadSize.GetValue());
         uint8_t * const pBuffer = new uint8_t[ ImageSize ];
 
         // We won't use image buffers greater than ImageSize
-        StreamGrabber.MaxBufferSize.SetValue(ImageSize);
+        pStreamGrabber->MaxBufferSize.SetValue(ImageSize);
 
         // We won't queue more than one image buffer at a time
-        StreamGrabber.MaxNumBuffer.SetValue(1);
+        pStreamGrabber->MaxNumBuffer.SetValue(1);
 
 	// Rafael: tive que setar essa opcao para a camera funcionar
-        StreamGrabber.SocketBufferSize.SetValue(127);
+        pStreamGrabber->SocketBufferSize.SetValue(127);
 
         // Allocate all resources for grabbing. Critical parameters like image
         // size now must not be changed until FinishGrab() is called.
-        StreamGrabber.PrepareGrab();
+        pStreamGrabber->PrepareGrab();
 
         // Buffers used for grabbing must be registered at the stream grabber.
         // The registration returns a handle to be used for queuing the buffer.
         const StreamBufferHandle hBuffer =
-            StreamGrabber.RegisterBuffer(pBuffer, ImageSize);
+            pStreamGrabber->RegisterBuffer(pBuffer, ImageSize);
 
         // Put the buffer into the grab queue for grabbing
-        StreamGrabber.QueueBuffer(hBuffer, NULL);
+        pStreamGrabber->QueueBuffer(hBuffer, NULL);
 
 	// Wait for signal to take a picture
 	/* now, lets get into an infinite loop of doing nothing. */
@@ -264,16 +263,16 @@ int main(int argc, char* argv[])
         // Clean up
 
         // You must deregister the buffers before freeing the memory
-        StreamGrabber.DeregisterBuffer(hBuffer);
+        pStreamGrabber->DeregisterBuffer(hBuffer);
 
         // Free all resources used for grabbing
-        StreamGrabber.FinishGrab();
+        pStreamGrabber->FinishGrab();
 
         // Close stream grabber
-        StreamGrabber.Close();
+        pStreamGrabber->Close();
 
         // Close camera
-        Camera.Close();
+        pCamera->Close();
 
 
         // Free memory of image buffer
