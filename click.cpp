@@ -1,15 +1,6 @@
-// AcquireSingleFrame.cpp
-//
-// This application grabs images from a Basler 1394 or Basler GigE camera
-// using the SingleFrame acquisition mode, i.e., the acquisition of each
-// single image must be initiated by the application.
-// The PYLON API framework is used to access the camera and to grab the
-// acquired images into user memory.
-
 // Include files to use the PYLON API
 #include <pylon/PylonIncludes.h>
 using namespace Pylon;
-
 
 #if defined( USE_1394 )
 // Settings to use  Basler 1394 cameras
@@ -156,10 +147,10 @@ int main(int argc, char* argv[])
 
   try
     {
-      cout << "Get the transport layer factory " << endl;
+      cout << "click: " << "Get the transport layer factory " << endl;
       CTlFactory& TlFactory = CTlFactory::GetInstance();
 
-      cout << "Create the transport layer object needed to enumerate or create a camera object of type Camera_t::DeviceClass()" << endl;
+      cout << "click: " << "Create the transport layer object needed to enumerate or create a camera object of type Camera_t::DeviceClass()" << endl;
       ITransportLayer *pTl = TlFactory.CreateTl(Camera_t::DeviceClass());
 
       // Exit the application if the specific transport layer is not available
@@ -170,7 +161,7 @@ int main(int argc, char* argv[])
 	  return 1;
         }
 
-      cout << "Get all attached cameras and exit the application if no camera is found" << endl;
+      cout << "click: " << "Get all attached cameras and exit the application if no camera is found" << endl;
       DeviceInfoList_t devices;
       if (0 == pTl->EnumerateDevices(devices))
         {
@@ -179,10 +170,10 @@ int main(int argc, char* argv[])
 	  return 1;
         }
 
-      cout "click: " << " Create the camera object of the first available camera.  The camera object is used to set and get all available camera features." << endl;
+      cout << "click: " << " Create the camera object of the first available camera.  The camera object is used to set and get all available camera features." << endl;
       pCamera = new Camera_t(pTl->CreateDevice(devices[0]));
 
-      cout "click: " << " Open the camera" << endl;
+      cout << "click: " << " Open the camera" << endl;
       pCamera->Open();
 
       cout << "click: " << "Get the first stream grabber object of the selected camera" << endl;
@@ -223,9 +214,39 @@ int main(int argc, char* argv[])
       cout << "click: " << "Set acquisition mode" << endl;
       pCamera->AcquisitionMode.SetValue(AcquisitionMode_SingleFrame);
 
-      cout << "click: " << "Set exposure settings" << endl;
-      pCamera->ExposureMode.SetValue(ExposureMode_Timed);
-      pCamera->ExposureTimeRaw.SetValue(30000);
+
+
+      // Commented because we're using Exposure Auto - Continuous
+      // cout << "click: " << "Set exposure settings" << endl;
+      // pCamera->ExposureMode.SetValue(ExposureMode_Timed);
+      // pCamera->ExposureTimeRaw.SetValue(30000);
+
+
+
+      // **************** From the manual (pg 304)
+      // Select auto function AOI 1
+      pCamera->AutoFunctionAOISelector.SetValue( AutoFunctionAOISelector_AOI1 );
+
+      // Set the position and size of the selected auto function
+      // AOI. In this example, we set the auto function AOI to cover
+      // the entire sensor
+      pCamera->AutoFunctionAOIOffsetX.SetValue( 0 );
+      pCamera->AutoFunctionAOIOffsetY.SetValue( 0 );
+      pCamera->AutoFunctionAOIWidth.SetValue(pCamera->AutoFunctionAOIWidth.GetMax() );
+      pCamera->AutoFunctionAOIHeight.SetValue(pCamera->AutoFunctionAOIHeight.GetMax() );
+
+      // Set the exposure time limits for exposure auto control
+      pCamera->AutoExposureTimeAbsLowerLimit.SetValue( 1000 );
+      pCamera->AutoExposureTimeAbsUpperLimit.SetValue( 1.0E6 );
+
+      // Set the target gray value for the exposure auto function (If
+      // gain auto is enabled, this target is also used for gain auto
+      // control.)
+      pCamera->AutoTargetValue.SetValue( 128 );
+
+      // Set the mode of operation for the exposure auto function
+      pCamera->ExposureAuto.SetValue( ExposureAuto_Continuous );
+      // **************** End From the manual
 
       cout << "click: " << " Create an image buffer" << endl;
       const size_t ImageSize = (size_t)(pCamera->PayloadSize.GetValue());
