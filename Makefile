@@ -2,7 +2,7 @@
 .PHONY			: all clean
 
 # the program to build
-NAME			:= AcquireSingleFrame
+NAME			:= click
 
 # Build tools and flags
 CXX			:= /usr/bin/g++
@@ -22,7 +22,7 @@ LDFLAGS			:= -L$(PYLON_ROOT)/lib64 \
 			   -Wl,-E
 LIBS			:= -lpylonbase
 
-all			: $(NAME)
+all			: $(NAME) clicka
 
 $(NAME)			: $(NAME).o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -30,5 +30,7 @@ $(NAME)			: $(NAME).o
 $(NAME).o		: $(NAME).cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
+clicka: clicka.cpp
+
 clean			:
-	$(RM) $(NAME).o $(NAME)
+	$(RM) $(NAME).o $(NAME) clicka
